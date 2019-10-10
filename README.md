@@ -3,4 +3,4 @@ An interactive fireworks display written in WebGL. There are a lot of things tha
 
 Drag the mouse to launch a mortar. Press Spacebar to toggle automatic rocket firing. Modify the large stack of constants in fireworks.js to customize the experience.
 
-<img align="center" src="https://i.imgur.com/mbzmgBn.gif" width="512" height="512" />
+<img align="center" src="https://i.imgur.com/ykVxyCG.gif" width="512" height="512" />
