@@ -1,0 +1,249 @@
+<html>
+    <head>
+        <style>
+            html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0px;
+                border: 0;
+                overflow: hidden;
+                display: block;
+            }
+            #overlay {
+                position: absolute;
+                left: 0px;
+                top: -12px;
+                color: white;
+                font-size: 8px;
+                font-family: monospace;
+                padding: 1em;
+                white-space: pre-line;
+                user-select: none;
+            }
+        </style>
+        <script id="vertex-shader-default" type="x-shader/x-vertex">
+            attribute vec4 vPosition;
+            attribute vec3 vColor;
+            
+            uniform float vTime;
+            
+            varying vec3 fColor;
+            varying float fTime;
+            
+            // Main
+            void main()
+            {
+                // Send important data to the Fragment Shader
+                fTime = vTime;
+                fColor = vColor;
+            
+                // Update the vertex's positions
+                gl_Position = vPosition;
+            }
+        </script>
+        <script id="fragment-shader-default" type="x-shader/x-fragment">
+            precision mediump float;
+            uniform vec2 u_resolution;
+            varying vec3 fColor;
+            varying float fTime;
+            
+            // Background constants
+            #define RENDER_STARS true
+            #define STARS_TWINKLE true
+            
+            // Generate a pseudo-random value
+            float random(vec2 pos)
+            {
+                return fract(sin(dot(pos.xy ,vec2(12.982,78.233))) * 48758.545344);
+            }
+            
+            // Make the stars twinkle
+            float oscillate(float minimum, float maximum, float speed) 
+            {
+                if (STARS_TWINKLE == true)
+                    return minimum+((1.0+sin(speed))/2.0)*(maximum-minimum);
+                else
+                    return 1.0;
+            }
+
+            // Main
+            void main() 
+            {
+                vec2 st = gl_FragCoord.xy/u_resolution.xy;
+
+                // Get some random values based on the coordinates of the current fragment
+                float rnd = random( vec2(st.x, st.y) );
+                float rnd2 = random( vec2(st.y, st.x) );
+                float rnd3 = random( vec2(st.x, st.x) );
+
+                // Make a star appear if we're lucky, otherwise just use whatever color was passed to the fragment shader
+                if (rnd == 0.0 && rnd2 < 0.3 && RENDER_STARS == true)
+                    gl_FragColor = vec4(oscillate(0.3+fColor.r, 1.0, rnd3*10.0+fTime/500.0), 
+                                        oscillate(0.3+fColor.g, 1.0, rnd3*10.0+fTime/500.0), 
+                                        oscillate(0.3+fColor.b, 1.0, rnd3*10.0+fTime/500.0), 1.0);
+                else
+                    gl_FragColor = vec4(fColor.r, fColor.g, fColor.b, 1.0);
+            }
+        </script>
+        
+        
+        <script id="vertex-shader-particles" type="x-shader/x-vertex">
+            attribute vec4 vPosition;
+            attribute vec3 vColor;
+            attribute vec4 vInfo;
+            attribute vec4 vInfo2;
+            
+            uniform float vTime;
+            
+            varying vec3  fColor;
+            varying float fObject;
+            varying float fDiscard;
+            varying float fTime;
+            varying float fParticleCreateTime;
+            varying float fParticleDieTime;
+            
+            // Particle data accessor constants
+            #define INFO_OBJ     vInfo.x
+            #define INFO_TIME    vInfo.y
+            #define INFO_DIETIME vInfo.z
+            #define INFO_SIZE    vInfo.w
+            #define INFO_VELX    vInfo2.x
+            #define INFO_VELY    vInfo2.y
+            #define INFO_GRAV    vInfo2.z
+            
+            // Useful constants
+            #define FALSE 0.0
+            #define TRUE  1.0
+            #define SECOND 1000.0
+            
+            // Particle object type constants
+            #define OBJ_ROCKET 0.0
+            #define OBJ_MORTAR 1.0
+            #define OBJ_FLARE  2.0
+            #define OBJ_FLAME  3.0
+            #define OBJ_FLASH  4.0
+            
+            // Main
+            void main()
+            {
+                // Send important data to the Fragment Shader
+                fTime = vTime;
+                fColor = vColor;
+                fObject = INFO_OBJ;
+                fParticleCreateTime = INFO_TIME;
+                fParticleDieTime = INFO_DIETIME;
+                
+                // Make the particle size the value stored in the info attribute
+                gl_PointSize = INFO_SIZE;
+            
+                // Discard uneeded verticies 
+                fDiscard = FALSE;
+                if (fParticleCreateTime > vTime || fParticleDieTime < vTime)
+                    fDiscard = TRUE;
+                 
+                // If we're not the flash, set the particle position based on the time
+                gl_Position = vPosition;
+                if (INFO_OBJ != OBJ_FLASH)
+                {
+                    float physicsTime = (fTime-fParticleCreateTime)/SECOND;
+                    gl_Position.x = vPosition.x + INFO_VELX*physicsTime;
+                    gl_Position.y = vPosition.y + INFO_VELY*physicsTime - 0.5*INFO_GRAV*pow(physicsTime, 2.0);
+                }
+            }
+        </script>
+        <script id="fragment-shader-particles" type="x-shader/x-fragment">
+            precision mediump float;
+            uniform vec2  u_resolution;
+            varying vec3  fColor;
+            varying float fTime;
+            varying float fParticleCreateTime;
+            varying float fParticleDieTime;
+            varying float fObject;
+            varying float fDiscard;
+            
+            // Useful constants
+            #define TRUE  1.0
+            #define FALSE 0.0
+            #define SECOND 1000.0
+            #define PI 3.14159
+            
+            // Particle object type constants
+            #define OBJ_ROCKET 0.0
+            #define OBJ_MORTAR 1.0
+            #define OBJ_FLARE  2.0
+            #define OBJ_FLAME  3.0
+            #define OBJ_FLASH  4.0
+            
+            // Render the mortar particle
+            void renderMortar()
+            {
+                vec2 circCoord = 2.0*gl_PointCoord - 1.0;
+                if (dot(circCoord, circCoord) > 1.0) 
+                {
+                    discard;
+                }
+                gl_FragColor = vec4(fColor.r, fColor.g, fColor.b, 1.0);
+            }
+            
+            // Render the flare particle
+            void renderFlare()
+            {
+                vec2 pos = vec2(gl_PointCoord.x-0.5, gl_PointCoord.y-0.5);
+                float brightness = 1.0-smoothstep(0.0, 0.5, length(pos));
+                float fade = (fParticleDieTime-fTime)/(fParticleDieTime-fParticleCreateTime);
+                gl_FragColor = vec4(fColor.r, fColor.g, fColor.b, brightness*fade);
+            }
+            
+            // Render the flash particle
+            void renderFlash()
+            {
+                vec2 pos = vec2(gl_PointCoord.x-0.5, gl_PointCoord.y-0.5);
+                float fade = ((fParticleDieTime-fTime)/(fParticleDieTime-fParticleCreateTime));
+                float brightness = 1.0-smoothstep(0.0, 0.5*fade, length(pos));
+                gl_FragColor = vec4(fColor.r, fColor.g, fColor.b, brightness*fade);
+            }
+
+            // Render the flame particle
+            void renderFlame()
+            {
+                vec2 pos = vec2(gl_PointCoord.x-0.5, gl_PointCoord.y-0.5);
+                float brightness = 1.0-smoothstep(0.0, 0.5, length(pos));
+                float afade = (fParticleDieTime-fTime)/(fParticleDieTime-fParticleCreateTime);
+                gl_FragColor = vec4(1.0, min(-(1.0-afade)*2.0+1.3, 1.0), max(-(1.0-afade)*2.0+0.5, 0.0), brightness*afade);
+            }
+            
+            // Main
+            void main() 
+            {
+                // If we're meant to ignore this particle, discard the pixels
+                if (fDiscard == TRUE)
+                    discard;
+                
+                // Draw the particle depending on its type
+                if (fObject == OBJ_ROCKET || fObject == OBJ_MORTAR)
+                    renderMortar();
+                else if (fObject == OBJ_FLARE)
+                    renderFlare();
+                else if (fObject == OBJ_FLAME)
+                    renderFlame();                
+                else if (fObject == OBJ_FLASH)
+                    renderFlash();
+                else
+                    gl_FragColor = vec4(fColor.r, fColor.g, fColor.b, 1.0); // Should never reach here
+            }
+        </script>
+        <script type="text/javascript" src="../Common/webgl-utils.js"></script>
+        <script type="text/javascript" src="../Common/initShaders.js"></script>
+        <script type="text/javascript" src="../Common/MV.js"></script>
+        <script type="text/javascript" src="fireworks.js"></script>
+    </head>
+    <body>
+        <title>Fireworks Show</title>
+        <canvas id="gl-canvas" width="512" height="512">
+            Oops... your browser doesn't support the HTML5 canvas element"
+        </canvas>
+        <div id="overlay">
+            <div><span id="text"></span></div>
+        </div>
+    </body>
+</html>
