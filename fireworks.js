@@ -47,7 +47,7 @@ const FLOATSIZE = 4;
 const RESIZE_CANVAS    = true; // Resize the canvas to fit the window 
 
 // General particle system constants
-const MAXPARTICLES     = 65000; //
+const MAXPARTICLES     = 65000; 
 const GRAVITY          = 0.75;
 const AUTOFIRE_MINTIME = 1*SECOND;
 const AUTOFIRE_MAXTIME = 3*SECOND;
@@ -449,8 +449,8 @@ function generateFlames()
             // Calculate all the positions and velocities to make sure the flames don't overlap the rocket
             var xrandpos = random_range(-1, 1);
             var xoffset = (ROCKET_SIZE*xrandpos)/canvas.width;
-            var yoffset = part_array[i+ARRAY_YVEL]*physicsTime - 0.5*GRAVITY*Math.pow(physicsTime, 2.0)-FLAME_SIZE/canvas.height;
-            var pos = vec2(part_array[i+ARRAY_XPOS]+xoffset, part_array[i+ARRAY_YPOS]+yoffset*ynormal-Math.sin(Math.PI*(1+xrandpos)/2)*ROCKET_SIZE/canvas.height);
+            var yoffset = (part_array[i+ARRAY_YVEL]*physicsTime - 0.5*GRAVITY*Math.pow(physicsTime, 2.0))*ynormal-FLAME_SIZE/canvas.height;
+            var pos = vec2(part_array[i+ARRAY_XPOS]+xoffset, part_array[i+ARRAY_YPOS]+yoffset-Math.sin(Math.PI*(1+xrandpos)/2)*ROCKET_SIZE/canvas.height);
             var vel = vec2(xrandpos/10, -0.5);
             
             // Create the flame particle
