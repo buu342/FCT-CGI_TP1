@@ -26,7 +26,9 @@
             attribute vec3 vColor;
             
             uniform float vTime;
+            uniform vec2 vResolution;
             
+            varying vec2 fResolution;
             varying vec3 fColor;
             varying float fTime;
             
@@ -36,14 +38,15 @@
                 // Send important data to the Fragment Shader
                 fTime = vTime;
                 fColor = vColor;
-            
+                fResolution = vResolution;
+
                 // Update the vertex's positions
                 gl_Position = vPosition;
             }
         </script>
         <script id="fragment-shader-default" type="x-shader/x-fragment">
             precision mediump float;
-            uniform vec2 u_resolution;
+            varying vec2 fResolution;
             varying vec3 fColor;
             varying float fTime;
             
@@ -69,7 +72,7 @@
             // Main
             void main() 
             {
-                vec2 st = gl_FragCoord.xy/u_resolution.xy;
+                vec2 st = gl_FragCoord.xy/fResolution.xy;
 
                 // Get some random values based on the coordinates of the current fragment
                 float rnd = random( vec2(st.x, st.y) );
@@ -94,7 +97,9 @@
             attribute vec4 vInfo2;
             
             uniform float vTime;
+            uniform vec2 vResolution;
             
+            varying vec2  fResolution;
             varying vec3  fColor;
             varying float fObject;
             varying float fDiscard;
@@ -132,6 +137,7 @@
                 fObject = INFO_OBJ;
                 fParticleCreateTime = INFO_TIME;
                 fParticleDieTime = INFO_DIETIME;
+                fResolution = vResolution;
                 
                 // Make the particle size the value stored in the info attribute
                 gl_PointSize = INFO_SIZE;
@@ -141,19 +147,24 @@
                 if (fParticleCreateTime > vTime || fParticleDieTime < vTime)
                     fDiscard = TRUE;
                  
+                // Get the aspect ratio
+                float ynormal = fResolution.x/fResolution.y;
+                 
                 // If we're not the flash, set the particle position based on the time
                 gl_Position = vPosition;
+                gl_Position.x = vPosition.x;
+                gl_Position.y = vPosition.y;
                 if (INFO_OBJ != OBJ_FLASH)
                 {
                     float physicsTime = (fTime-fParticleCreateTime)/SECOND;
                     gl_Position.x = vPosition.x + INFO_VELX*physicsTime;
-                    gl_Position.y = vPosition.y + INFO_VELY*physicsTime - 0.5*INFO_GRAV*pow(physicsTime, 2.0);
+                    gl_Position.y = vPosition.y + (INFO_VELY*physicsTime - 0.5*INFO_GRAV*pow(physicsTime, 2.0))*ynormal;
                 }
             }
         </script>
         <script id="fragment-shader-particles" type="x-shader/x-fragment">
             precision mediump float;
-            uniform vec2  u_resolution;
+            varying vec2  fResolution;
             varying vec3  fColor;
             varying float fTime;
             varying float fParticleCreateTime;
@@ -232,9 +243,9 @@
                     gl_FragColor = vec4(fColor.r, fColor.g, fColor.b, 1.0); // Should never reach here
             }
         </script>
-        <script type="text/javascript" src="Common/webgl-utils.js"></script>
-        <script type="text/javascript" src="Common/initShaders.js"></script>
-        <script type="text/javascript" src="Common/MV.js"></script>
+        <script type="text/javascript" src="../Common/webgl-utils.js"></script>
+        <script type="text/javascript" src="../Common/initShaders.js"></script>
+        <script type="text/javascript" src="../Common/MV.js"></script>
         <script type="text/javascript" src="fireworks.js"></script>
     </head>
     <body>

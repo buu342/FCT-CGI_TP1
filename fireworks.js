@@ -11,6 +11,7 @@
 var gl; 
 var programDefault;     // Background + Line shaders
 var programParticles;   // Particle System shaders
+var ynormal;            // Aspect ratio
 
 // Timer variables
 var StartTime = (new Date()).getTime(); // Needed to subtract from CurTime because JS is 64 bit and GLSL is 32
@@ -30,15 +31,23 @@ var part_array; // 2 floats for starting pos, 3 floats for color, 8 floats for d
 
 
 /*====================================
+          Program Constants
+ Change if you know what you're doing
+====================================*/
+
+const SECOND    = 1000;
+const FLOATSIZE = 4;
+
+
+/*====================================
       Particle System Constants
             Change for fun
 ====================================*/
 
-const SECOND           = 1000;
-const RESIZE_CANVAS    = false; // Resize the canvas to fit the window (WARNING: Experimental)
+const RESIZE_CANVAS    = true; // Resize the canvas to fit the window 
 
 // General particle system constants
-const MAXPARTICLES     = 65000;
+const MAXPARTICLES     = 65000; //
 const GRAVITY          = 0.75;
 const AUTOFIRE_MINTIME = 1*SECOND;
 const AUTOFIRE_MAXTIME = 3*SECOND;
@@ -57,8 +66,8 @@ const FLARE_VELOCITYMULT      = 0.5;
 const FLARE_MINLIFE           = 0.5*SECOND;
 const FLARE_MAXLIFE           = 2.0*SECOND;
 const FLARE_SIZE              = 5.0;
-const FLARE_RECURSIVE         = 2.0;  // How many times to recursively call the explosion (WARNING: this will raise the number of flares to the power of this value!)
-const RECURSIVE_SPEEDADDITIVE = true; // Make the recursive flare speeds add up (so momentum is conserved)
+const FLARE_RECURSIVE         = 2.0; // How many times to recursively call the explosion (WARNING: this will raise the number of flares to the power of this value!)
+const FLARE_SPEEDADDITIVE     = true; // Make the recursive flare speeds add up (so momentum is conserved)
 
 // Flame constants
 const FLAME_ENABLE      = true;
@@ -72,7 +81,7 @@ const FLASH_LIFETIME = 0.2*SECOND;
 
 
 /*====================================
-          Program Constants
+          Shader Constants
  Change if you know what you're doing
 ====================================*/
 
@@ -83,10 +92,13 @@ const OBJ_FLARE  = 2.0;
 const OBJ_FLAME  = 3.0;
 const OBJ_FLASH  = 4.0;
 
-// Particle data sizes  
-const PART_VERTSIZE = 5;
-const PART_DATASIZE = 8;
-const PART_SIZE     = (PART_VERTSIZE+PART_DATASIZE)
+// Attribute data sizes
+const SIZE_POS   = 2;
+const SIZE_COL   = 3;
+const SIZE_INFO  = 4;  
+const SIZE_INFO2 = 4;  
+const SIZE_VERT  = SIZE_POS+SIZE_COL;
+const SIZE_PART  = (SIZE_VERT+SIZE_INFO+SIZE_INFO2)
 
 // Particle data structure
 const ARRAY_XPOS    = 0;
@@ -101,8 +113,6 @@ const ARRAY_SIZE    = 8;
 const ARRAY_XVEL    = 9;
 const ARRAY_YVEL    = 10;
 const ARRAY_GRAV    = 11;
-
-const FLOATSIZE = 4;
 
 
 /*====================================
@@ -210,8 +220,8 @@ function updateShaderUniforms()
     var program = gl.getParameter(gl.CURRENT_PROGRAM)
     
     // Pass the resolution of the canvas to the fragment shader
-    var resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
-    gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
+    var vResolution = gl.getUniformLocation(program, "vResolution");
+    gl.uniform2f(vResolution, gl.canvas.width, gl.canvas.height);
     
     // Pass the current time to the shaders
     var vTime = gl.getUniformLocation(program, "vTime");
@@ -227,7 +237,7 @@ function resizeCanvas()
     
     // Get the current window size
     var canvas = document.getElementById("gl-canvas");
-    var w = window.innerWidth;
+    var w = window.innerWidth   ;
     var h = window.innerHeight;
 
     // Change the canvas if we changed the size
@@ -235,8 +245,9 @@ function resizeCanvas()
     {
         canvas.width = w;
         canvas.height = h;
+        ynormal = w/h;
           
-        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.viewport(0, 0, w, h);
     }
 }
 
@@ -252,6 +263,7 @@ window.onload = function init()
         alert("WebGL isn't available");
     
     // Initialize some globals
+    ynormal = 1.0;
     autofire_enabled = true;
     fps_after = 0;
     fps_before = 0;
@@ -296,7 +308,7 @@ function launchMortar()
     // Calculate physics based on the vector created from the mouse
     var pos = vec2(mouseStartPos[0], mouseStartPos[1])
     var col = vec3(Math.random(), Math.random(), Math.random());
-    var vel = vec2((mouseEndPos[0]-mouseStartPos[0])*MORTAR_VELOCITYMULT, (mouseEndPos[1]-mouseStartPos[1])*MORTAR_VELOCITYMULT);
+    var vel = vec2((mouseEndPos[0]-mouseStartPos[0])*MORTAR_VELOCITYMULT/Math.sqrt(1/ynormal), (mouseEndPos[1]-mouseStartPos[1])*MORTAR_VELOCITYMULT/Math.sqrt(ynormal));
     var lifetime = Math.max(0,(vel[1]/GRAVITY)*SECOND);
     
     // Create the mortar
@@ -314,9 +326,10 @@ function launchMortar()
 function launchRocket()
 {
     // Generate random physics values
+    var yvel = random_range(ROCKET_MINVEL, ROCKET_MAXVEL)
     var pos = vec2(1-Math.random()*2, -1.0)
     var col = vec3(Math.random(), Math.random(), Math.random());
-    var vel = vec2(0, random_range(ROCKET_MINVEL, ROCKET_MAXVEL));
+    var vel = vec2(0, yvel/Math.sqrt(ynormal));
     var lifetime = (vel[1]/GRAVITY)*SECOND;
     
     // Create the Rocket
@@ -346,7 +359,7 @@ function generateFlares(pos, vel, col, delay, recursive)
     {
         var physicsTime = delay/SECOND;
         var posx = pos[0] + vel[0]*physicsTime;
-        var posy = pos[1] + vel[1]*physicsTime - 0.5*GRAVITY*Math.pow(physicsTime, 2);
+        var posy = pos[1] + (vel[1]*physicsTime - 0.5*GRAVITY*Math.pow(physicsTime, 2))*ynormal;
         newpos = vec2(posx, posy); 
     }
     else
@@ -361,19 +374,23 @@ function generateFlares(pos, vel, col, delay, recursive)
             vec2(0.0, 0.0), FLASH_SIZE
         );
     }
-    
+
     // Create the flares, also with a delay
     for (var i=0; i<numparts; i++)
     {
         // Generate random velocities within a circle
         var maxvel = Math.sqrt(Math.random())*FLARE_VELOCITYMULT;
         var angle = 2*Math.PI*Math.random()
-        var newervel = vec2(vel[0]+Math.cos(angle)*maxvel, Math.sin(angle)*maxvel);
+        var newervel = vec2((Math.cos(angle)*maxvel), Math.sin(angle)*maxvel);
         var flarelife = random_range(FLARE_MINLIFE, FLARE_MAXLIFE);
         
         // If we throw a mortar downwards, send in the downwards speed as well
         if (vel[1] < 0)
             newervel[1] = newervel[1] + vel[1];
+        
+        // Add speed if the setting is enabled
+        if (FLARE_SPEEDADDITIVE)
+            newervel[0] += vel[0];
         
         // Create new particles
         particleCreate(OBJ_FLARE, 
@@ -382,14 +399,18 @@ function generateFlares(pos, vel, col, delay, recursive)
             newervel, FLARE_SIZE
         );
         
+        // If we don't wish to perform recursive explosions, ignore the next block of code
+        if (FLARE_RECURSIVE == 1.0)
+            continue;
+        
         // Make a recursive explosion
-        var newerposx = newpos[0]+newervel[0]*flarelife/SECOND
+        var newerposx = newpos[0]+newervel[0]*flarelife/SECOND;
         var newerposy = newpos[1]+newervel[1]*flarelife/SECOND-0.5*GRAVITY*Math.pow(flarelife/SECOND, 2);
         var newerpos = vec2(newerposx, newerposy);
         
         // If we want to add to the current velocities, do that instead of making new velocities
         var newerervel = {}
-        if (RECURSIVE_SPEEDADDITIVE)
+        if (FLARE_SPEEDADDITIVE)
         {
             newerervel[0] = newervel[0];
             newerervel[1] = newervel[1];
@@ -412,7 +433,7 @@ function generateFlames()
     var canvas = document.getElementById("gl-canvas");
     
     // Iterate through all the particles
-    for (var i=0; i<MAXPARTICLES*PART_SIZE; i+=PART_SIZE)
+    for (var i=0; i<MAXPARTICLES*SIZE_PART; i+=SIZE_PART)
     {
         // If we found a rocket
         if (part_array[i+ARRAY_OBJ] == OBJ_ROCKET)
@@ -429,7 +450,7 @@ function generateFlames()
             var xrandpos = random_range(-1, 1);
             var xoffset = (ROCKET_SIZE*xrandpos)/canvas.width;
             var yoffset = part_array[i+ARRAY_YVEL]*physicsTime - 0.5*GRAVITY*Math.pow(physicsTime, 2.0)-FLAME_SIZE/canvas.height;
-            var pos = vec2(part_array[i+ARRAY_XPOS]+xoffset, part_array[i+ARRAY_YPOS]+yoffset-Math.sin(Math.PI*(1+xrandpos)/2)*ROCKET_SIZE/canvas.height);
+            var pos = vec2(part_array[i+ARRAY_XPOS]+xoffset, part_array[i+ARRAY_YPOS]+yoffset*ynormal-Math.sin(Math.PI*(1+xrandpos)/2)*ROCKET_SIZE/canvas.height);
             var vel = vec2(xrandpos/10, -0.5);
             
             // Create the flame particle
@@ -464,7 +485,7 @@ function particleCreate(type, pos, col, lifetime, delay, vel, size)
         var oldestIndex = -1;
         
         // Find the oldest particle
-        for (var i=0; i<MAXPARTICLES*PART_SIZE; i+=PART_SIZE)
+        for (var i=0; i<MAXPARTICLES*SIZE_PART; i+=SIZE_PART)
         {
             if (oldestIndex == -1 || part_array[i+ARRAY_TIME] < oldestTime)
             {
@@ -474,15 +495,15 @@ function particleCreate(type, pos, col, lifetime, delay, vel, size)
         }
         
         // Replace it with our new particle
-        for (var i=0; i<PART_SIZE; i++)
+        for (var i=0; i<SIZE_PART; i++)
             part_array[oldestIndex+i] = data[i];
     }
     else
     {
         // Create the new particle
         part_count++;
-        for (var i=0; i<PART_SIZE; i++)
-            part_array[(part_count-1)*PART_SIZE+i] = data[i];
+        for (var i=0; i<SIZE_PART; i++)
+            part_array[(part_count-1)*SIZE_PART+i] = data[i];
     }
 }
 
@@ -490,9 +511,9 @@ function particleCreate(type, pos, col, lifetime, delay, vel, size)
 function particlesCleanup()
 {
     // Remove particles that are past their lifetime
-    for (var i=0; i<MAXPARTICLES*PART_SIZE; i+=PART_SIZE)
+    for (var i=0; i<MAXPARTICLES*SIZE_PART; i+=SIZE_PART)
         if (part_array[i+ARRAY_DIETIME] < CurTime)
-            for (var j=0; j<PART_SIZE; j++)
+            for (var j=0; j<SIZE_PART; j++)
                 part_array[i+j] = null;
     
     // Filter out NULL values and update the particle count
@@ -502,7 +523,7 @@ function particlesCleanup()
           return el != null;
         }
     ); 
-    part_count = (part_array.length)/PART_SIZE;
+    part_count = (part_array.length)/SIZE_PART;
 }
 
 
@@ -553,10 +574,10 @@ function renderBackground()
     
     // Explain how the data is packed
     var vPosition = gl.getAttribLocation(program, "vPosition");
-    gl.vertexAttribPointer(vPosition, 2, gl.FLOAT, false, FLOATSIZE*5, 0); 
+    gl.vertexAttribPointer(vPosition, SIZE_POS, gl.FLOAT, false, FLOATSIZE*SIZE_VERT, 0); 
     gl.enableVertexAttribArray(vPosition);
     var vColor = gl.getAttribLocation(program, "vColor");
-    gl.vertexAttribPointer(vColor, 3, gl.FLOAT, false, FLOATSIZE*5, FLOATSIZE*2);
+    gl.vertexAttribPointer(vColor, SIZE_COL, gl.FLOAT, false, FLOATSIZE*SIZE_VERT, FLOATSIZE*SIZE_POS);
     gl.enableVertexAttribArray(vColor);
     
     // Render the background
@@ -582,16 +603,16 @@ function renderParticles()
     
     // Explain how the data is packed
     var vPosition = gl.getAttribLocation(program, "vPosition");
-    gl.vertexAttribPointer(vPosition, 2, gl.FLOAT, false, FLOATSIZE*PART_SIZE, 0); 
+    gl.vertexAttribPointer(vPosition, SIZE_POS, gl.FLOAT, false, FLOATSIZE*SIZE_PART, 0); 
     gl.enableVertexAttribArray(vPosition);
     var vColor = gl.getAttribLocation(program, "vColor");
-    gl.vertexAttribPointer(vColor, 3, gl.FLOAT, false, FLOATSIZE*PART_SIZE, FLOATSIZE*2);
+    gl.vertexAttribPointer(vColor, SIZE_COL, gl.FLOAT, false, FLOATSIZE*SIZE_PART, FLOATSIZE*SIZE_POS);
     gl.enableVertexAttribArray(vColor);
     var vInfo = gl.getAttribLocation(program, "vInfo");
-    gl.vertexAttribPointer(vInfo, 4, gl.FLOAT, false, FLOATSIZE*PART_SIZE, FLOATSIZE*5); 
+    gl.vertexAttribPointer(vInfo, SIZE_INFO, gl.FLOAT, false, FLOATSIZE*SIZE_PART, FLOATSIZE*(SIZE_VERT)); 
     gl.enableVertexAttribArray(vInfo);
     var vInfo2 = gl.getAttribLocation(program, "vInfo2");
-    gl.vertexAttribPointer(vInfo2, 4, gl.FLOAT, false, FLOATSIZE*PART_SIZE, FLOATSIZE*(5+4)); 
+    gl.vertexAttribPointer(vInfo2, SIZE_INFO, gl.FLOAT, false, FLOATSIZE*SIZE_PART, FLOATSIZE*(SIZE_VERT+SIZE_INFO)); 
     gl.enableVertexAttribArray(vInfo2);
     
     // Render the particles
@@ -624,10 +645,10 @@ function renderLine()
     
     // Explain how the data is packed
     var vPosition = gl.getAttribLocation(program, "vPosition");
-    gl.vertexAttribPointer(vPosition, 2, gl.FLOAT, false, FLOATSIZE*5, 0);
+    gl.vertexAttribPointer(vPosition, SIZE_POS, gl.FLOAT, false, FLOATSIZE*SIZE_VERT, 0);
     gl.enableVertexAttribArray(vPosition);
     var vColor = gl.getAttribLocation(program, "vColor");
-    gl.vertexAttribPointer(vColor, 3, gl.FLOAT, false, FLOATSIZE*5, FLOATSIZE*2);
+    gl.vertexAttribPointer(vColor, SIZE_COL, gl.FLOAT, false, FLOATSIZE*SIZE_VERT, FLOATSIZE*SIZE_POS);
     gl.enableVertexAttribArray(vColor);
     
     // Render the line
